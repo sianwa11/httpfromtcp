@@ -1,6 +1,7 @@
 package request
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"strings"
@@ -31,11 +32,24 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	}, nil
 }
 
-func parseRequestLine(line []byte) (*RequestLine, error) {
-	lines := string(line)
-	lineParts := strings.Split(lines, "\r\n")
-	requestLineParts := lineParts[0]
-	parts := strings.Split(requestLineParts, " ")
+func parseRequestLine(data []byte) (*RequestLine, error) {
+	idx := bytes.Index(data, []byte("\r\n"))
+	if idx == -1 {
+		return nil, fmt.Errorf("could not find CRLF in request-line")
+	}
+
+	requestLineText := string(data[:idx])
+	requestLine, err := requestLineFromString(requestLineText)
+	if err != nil {
+		return nil, err
+	}
+
+	return requestLine, nil
+}
+
+func requestLineFromString(str string) (*RequestLine, error) {
+
+	parts := strings.Split(str, " ")
 
 	if len(parts) != 3 {
 		return nil, fmt.Errorf("invalid request line")

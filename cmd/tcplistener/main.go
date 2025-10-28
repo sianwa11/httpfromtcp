@@ -1,54 +1,11 @@
 package main
 
 import (
-	"errors"
 	"fmt"
-	"io"
+	"httpfromtcp/internal/request"
 	"log"
 	"net"
-	"strings"
 )
-
-// const filePath = "messages.txt"
-
-func getLinesChannel(conn net.Conn) <-chan string {
-	lines := make(chan string)
-
-	go func() {
-		defer conn.Close()
-		defer close(lines)
-
-		currentLineContents := ""
-		for {
-			b := make([]byte, 8)
-			n, err := conn.Read(b)
-			if err != nil {
-				if currentLineContents != "" {
-					lines <- currentLineContents
-				}
-
-				if errors.Is(err, io.EOF) {
-					break
-				}
-
-				fmt.Printf("an error occured: %s\n", err)
-				return
-			}
-
-			str := string(b[:n])
-			parts := strings.Split(str, "\n")
-
-			for i := 0; i < len(parts)-1; i++ {
-				lines <- fmt.Sprintf("%s%s", currentLineContents, parts[i])
-				currentLineContents = ""
-			}
-
-			currentLineContents += parts[len(parts)-1]
-		}
-	}()
-
-	return lines
-}
 
 func main() {
 	listener, err := net.Listen("tcp", ":42069")
@@ -64,11 +21,13 @@ func main() {
 		}
 		fmt.Println("connection has been accepted")
 
-		lines := getLinesChannel(conn)
-
-		for line := range lines {
-			fmt.Println(line)
+		req, err := request.RequestFromReader(conn)
+		if err != nil {
+			log.Fatalln("error reading request:", err)
 		}
+
+		fmt.Printf("Request line: \n - Method: %s\n - Target: %s\n - Version: %s\n", req.RequestLine.Method, req.RequestLine.RequestTarget, req.RequestLine.HttpVersion)
+
 		fmt.Println("connection has been closed")
 	}
 

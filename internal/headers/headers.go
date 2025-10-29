@@ -53,6 +53,15 @@ func (h Headers) Set(key, value string) {
 	h[key] = value
 }
 
+func (h Headers) Get(key string) string {
+	key = strings.ToLower(strings.TrimSpace(key))
+	v, ok := h[key]
+	if !ok {
+		return ""
+	}
+	return v
+}
+
 var fieldNamePattern = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+\-.\^_` + "`" + `|~]+$`)
 
 func isValidFieldName(s string) bool {

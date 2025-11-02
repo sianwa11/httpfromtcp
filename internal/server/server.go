@@ -30,18 +30,20 @@ func (s *Server) listen() error {
 		fmt.Println("connection has been accepted")
 
 		go func() {
-			defer conn.Close()
 			s.handle(conn)
 		}()
 	}
 }
 
 func (s *Server) handle(conn net.Conn) {
-	conn.Write([]byte("HTTP/1.1 200 OK\r\n"))
-	conn.Write([]byte("Content-Type: text/plain\r\n"))
-	conn.Write([]byte("Content-Length: 13\r\n"))
-	conn.Write([]byte("\r\n")) // Empty line separates headers from body
-	conn.Write([]byte("Hello World!"))
+	defer conn.Close()
+	response := "HTTP/1.1 200 OK\r\n" + // Status line
+		"Content-Type: text/plain\r\n" + // Example header
+		"Content-Length: 13\r\n" + // Content length header
+		"\r\n" + // Blank line to separate headers from the body
+		"Hello World!\n" // Body
+	conn.Write([]byte(response))
+	return
 }
 
 func Serve(port int) (*Server, error) {

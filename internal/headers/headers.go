@@ -15,6 +15,11 @@ func NewHeaders() Headers {
 	return map[string]string{}
 }
 
+func (h Headers) OverrideHeader(key, value string) {
+	key = strings.ToLower(key)
+	h[key] = value
+}
+
 func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	idx := bytes.Index(data, []byte(CRLF))
 	if idx == -1 {
@@ -46,6 +51,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 }
 
 func (h Headers) Set(key, value string) {
+	key = strings.ToLower(key)
 	v, ok := h[key]
 	if ok {
 		value = strings.Join([]string{v, value}, ", ")
@@ -53,13 +59,10 @@ func (h Headers) Set(key, value string) {
 	h[key] = value
 }
 
-func (h Headers) Get(key string) string {
+func (h Headers) Get(key string) (string, bool) {
 	key = strings.ToLower(strings.TrimSpace(key))
 	v, ok := h[key]
-	if !ok {
-		return ""
-	}
-	return v
+	return v, ok
 }
 
 var fieldNamePattern = regexp.MustCompile(`^[A-Za-z0-9!#$%&'*+\-.\^_` + "`" + `|~]+$`)

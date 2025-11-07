@@ -2,20 +2,42 @@ package server
 
 import (
 	"fmt"
+	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"net"
 	"sync/atomic"
 )
 
+type Handler func(w *response.Writer, req *request.Request)
+
+// Server is a HTTP 1.1 server
 type Server struct {
-	Address  string
+	handler  Handler
 	Listener net.Listener
 	closed   atomic.Bool
 }
 
+func Serve(port int, handler Handler) (*Server, error) {
+	listener, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	if err != nil {
+		return nil, err
+	}
+
+	server := &Server{
+		handler:  handler,
+		Listener: listener,
+	}
+
+	go server.listen()
+	return server, nil
+}
+
 func (s *Server) Close() error {
 	s.closed.Store(true)
-	return s.Listener.Close()
+	if s.Listener != nil {
+		return s.Listener.Close()
+	}
+	return nil
 }
 
 func (s *Server) listen() error {
@@ -30,39 +52,35 @@ func (s *Server) listen() error {
 
 		fmt.Println("connection has been accepted")
 
-		go func() {
-			s.handle(conn)
-		}()
+		go s.handle(conn)
 	}
 }
 
 func (s *Server) handle(conn net.Conn) {
 	defer conn.Close()
-	response.WriteStatusLine(conn, response.StatusOK)
-	headers := response.GetDefaultHeaders(0)
-	if err := response.WriteHeaders(conn, headers); err != nil {
-		fmt.Printf("error: %v\n", err)
-	}
-}
-
-func Serve(port int) (*Server, error) {
-	portStr := fmt.Sprintf(":%d", port)
-	listener, err := net.Listen("tcp", portStr)
+	w := response.NewWriter(conn)
+	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		return nil, err
+		w.WriteStatusLine(response.StatusBadRequest)
+		body := []byte(fmt.Sprintf("Error parsing request: %v", err))
+		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
+		w.WriteBody(body)
+		return
 	}
-
-	server := &Server{
-		Address:  portStr,
-		Listener: listener,
-	}
-
-	go func() {
-		err := server.listen()
-		if err != nil {
-			fmt.Printf("error in server listen: %v", err)
-		}
-	}()
-
-	return server, nil
+	s.handler(w, req)
+	return
 }
+
+// type HandlerError struct {
+// 	StatusCode response.StatusCode
+// 	Message    string
+// }
+
+// func (he *HandlerError) Write(w io.Writer) {
+// 	writer := response.NewWriter(w)
+// 	writer.WriteStatusLine(he.StatusCode)
+// 	messageBytes := []byte(he.Message)
+// 	headers := response.GetDefaultHeaders(len(messageBytes))
+// 	writer.WriteHeaders(headers)
+// 	writer.WriteBody(messageBytes)
+// }

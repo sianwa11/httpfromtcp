@@ -40,13 +40,13 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 	req := &Request{
 		State:   initalized,
 		Headers: headers.NewHeaders(),
-		Body:    []byte{},
+		Body:    make([]byte, 0),
 	}
 
 	for {
 		if readToIndex >= len(buf) {
 			newBuff := make([]byte, len(buf)*2)
-			copy(newBuff, buf[:readToIndex])
+			copy(newBuff, buf)
 			buf = newBuff
 		}
 
@@ -56,6 +56,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 				if req.State != requestStateDone {
 					return nil, fmt.Errorf("incomplete request, in state: %d, read n bytes on EOF: %d", req.State, n)
 				}
+				break
 			}
 			return nil, err
 		}
@@ -67,7 +68,7 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		}
 
 		if parsed > 0 {
-			copy(buf, buf[parsed:readToIndex])
+			copy(buf, buf[parsed:])
 			readToIndex -= parsed
 		}
 
@@ -123,8 +124,8 @@ func (r *Request) parseSingle(data []byte) (int, error) {
 		return n, nil
 
 	case requestStateParsingBody:
-		contentLengthStr := r.Headers.Get("Content-Length")
-		if contentLengthStr == "" {
+		contentLengthStr, ok := r.Headers.Get("Content-Length")
+		if !ok {
 			r.State = requestStateDone
 			return len(data), nil
 		}

@@ -4,16 +4,17 @@ import (
 	"fmt"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
+	"log"
 	"net"
 	"sync/atomic"
 )
 
 type Handler func(w *response.Writer, req *request.Request)
 
-// Server is a HTTP 1.1 server
+// Server is an HTTP 1.1 server
 type Server struct {
 	handler  Handler
-	Listener net.Listener
+	listener net.Listener
 	closed   atomic.Bool
 }
 
@@ -22,36 +23,32 @@ func Serve(port int, handler Handler) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	server := &Server{
+	s := &Server{
 		handler:  handler,
-		Listener: listener,
+		listener: listener,
 	}
-
-	go server.listen()
-	return server, nil
+	go s.listen()
+	return s, nil
 }
 
 func (s *Server) Close() error {
 	s.closed.Store(true)
-	if s.Listener != nil {
-		return s.Listener.Close()
+	if s.listener != nil {
+		return s.listener.Close()
 	}
 	return nil
 }
 
-func (s *Server) listen() error {
+func (s *Server) listen() {
 	for {
-		conn, err := s.Listener.Accept()
+		conn, err := s.listener.Accept()
 		if err != nil {
 			if s.closed.Load() {
-				return nil
+				return
 			}
-			return fmt.Errorf("error accepting connection: %s", err)
+			log.Printf("Error accepting connection: %v", err)
+			continue
 		}
-
-		fmt.Println("connection has been accepted")
-
 		go s.handle(conn)
 	}
 }
@@ -61,7 +58,7 @@ func (s *Server) handle(conn net.Conn) {
 	w := response.NewWriter(conn)
 	req, err := request.RequestFromReader(conn)
 	if err != nil {
-		w.WriteStatusLine(response.StatusBadRequest)
+		w.WriteStatusLine(response.StatusCodeBadRequest)
 		body := []byte(fmt.Sprintf("Error parsing request: %v", err))
 		w.WriteHeaders(response.GetDefaultHeaders(len(body)))
 		w.WriteBody(body)
@@ -70,17 +67,3 @@ func (s *Server) handle(conn net.Conn) {
 	s.handler(w, req)
 	return
 }
-
-// type HandlerError struct {
-// 	StatusCode response.StatusCode
-// 	Message    string
-// }
-
-// func (he *HandlerError) Write(w io.Writer) {
-// 	writer := response.NewWriter(w)
-// 	writer.WriteStatusLine(he.StatusCode)
-// 	messageBytes := []byte(he.Message)
-// 	headers := response.GetDefaultHeaders(len(messageBytes))
-// 	writer.WriteHeaders(headers)
-// 	writer.WriteBody(messageBytes)
-// }

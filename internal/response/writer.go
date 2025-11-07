@@ -15,14 +15,14 @@ const (
 )
 
 type Writer struct {
-	writer      io.Writer
 	writerState writerState
+	writer      io.Writer
 }
 
 func NewWriter(w io.Writer) *Writer {
 	return &Writer{
-		writer:      w,
 		writerState: writerStateStatusLine,
+		writer:      w,
 	}
 }
 
@@ -30,7 +30,6 @@ func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 	if w.writerState != writerStateStatusLine {
 		return fmt.Errorf("cannot write status line in state %d", w.writerState)
 	}
-
 	defer func() { w.writerState = writerStateHeaders }()
 	_, err := w.writer.Write(getStatusLine(statusCode))
 	return err
@@ -40,9 +39,7 @@ func (w *Writer) WriteHeaders(h headers.Headers) error {
 	if w.writerState != writerStateHeaders {
 		return fmt.Errorf("cannot write headers in state %d", w.writerState)
 	}
-
-	defer func() { w.writerState = writerStateHeaders }()
-
+	defer func() { w.writerState = writerStateBody }()
 	for k, v := range h {
 		_, err := w.writer.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
 		if err != nil {

@@ -1,8 +1,10 @@
 package main
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"httpfromtcp/internal/headers"
 	"httpfromtcp/internal/request"
 	"httpfromtcp/internal/response"
 	"httpfromtcp/internal/server"
@@ -118,10 +120,13 @@ func handlerProxy(w *response.Writer, req *request.Request) {
 	w.WriteStatusLine(response.StatusCode(res.StatusCode))
 	h := response.GetDefaultHeaders(0)
 	h.Override("Transfer-Encoding", "chunked")
+	h.Set("Trailer", "X-Content-SHA256")
+	h.Set("Trailer", "X-Content-Length")
 	h.Remove("Content-Length")
 	w.WriteHeaders(h)
 
 	buf := make([]byte, 1024)
+	responseTracker := []byte{}
 	for {
 		n, err := res.Body.Read(buf)
 		if err != nil {
@@ -139,6 +144,12 @@ func handlerProxy(w *response.Writer, req *request.Request) {
 		if err != nil {
 			fmt.Println("error writing chunked body:", err)
 		}
-
+		responseTracker = append(responseTracker, buf[:n]...)
 	}
+
+	sum := sha256.Sum256(responseTracker)
+	trailers := headers.NewHeaders()
+	trailers.Set("X-Content-SHA256", fmt.Sprintf("%x", sum))
+	trailers.Set("X-Content-Length", fmt.Sprintf("%d", len(responseTracker)))
+	w.WriteTrailers(trailers)
 }

@@ -12,6 +12,8 @@ const (
 	writerStateStatusLine writerState = iota
 	writerStateHeaders
 	writerStateBody
+	writerStateTrailer
+	writerStateDone
 )
 
 type Writer struct {
@@ -54,6 +56,7 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 	if w.writerState != writerStateBody {
 		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
 	}
+	defer func() { w.writerState = writerStateTrailer }()
 	return w.writer.Write(p)
 }
 
@@ -61,46 +64,56 @@ func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 	if w.writerState != writerStateBody {
 		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
 	}
+	chunkSize := len(p)
 
-	totalBytesWritten := 0
-	n, err := w.writer.Write([]byte(fmt.Sprintf("%x\r\n", len(p))))
+	nTotal := 0
+	n, err := fmt.Fprintf(w.writer, "%x\r\n", chunkSize)
 	if err != nil {
-		return n, err
+		return nTotal, err
 	}
-	totalBytesWritten += n
+	nTotal += n
 
 	n, err = w.writer.Write(p)
 	if err != nil {
-		return totalBytesWritten, err
+		return nTotal, err
 	}
-	totalBytesWritten += n
+	nTotal += n
 
 	n, err = w.writer.Write([]byte("\r\n"))
 	if err != nil {
-		return totalBytesWritten, err
+		return nTotal, err
 	}
-
-	totalBytesWritten += n
-	return totalBytesWritten, nil
+	nTotal += n
+	return nTotal, nil
 }
 
 func (w *Writer) WriteChunkedBodyDone() (int, error) {
 	if w.writerState != writerStateBody {
 		return 0, fmt.Errorf("cannot write body in state %d", w.writerState)
 	}
-
-	totalBytesWritten := 0
-	n, err := w.writer.Write([]byte("0\r\n\r\n"))
+	defer func() { w.writerState = writerStateTrailer }()
+	n, err := w.writer.Write([]byte("0\r\n"))
 	if err != nil {
 		return n, err
 	}
-	totalBytesWritten += n
+	return n, nil
+}
 
-	n, err = w.writer.Write([]byte("\r\n"))
-	if err != nil {
-		return totalBytesWritten + n, err
+func (w *Writer) WriteTrailers(h headers.Headers) error {
+	if w.writerState != writerStateTrailer {
+		return fmt.Errorf("cannot write headers in state %d", w.writerState)
 	}
 
-	totalBytesWritten += n
-	return totalBytesWritten, nil
+	defer func() { w.writerState = writerStateDone }()
+
+	for k, v := range h {
+		_, err := w.writer.Write([]byte(fmt.Sprintf("%s: %s\r\n", k, v)))
+		if err != nil {
+			return err
+		}
+	}
+
+	_, err := w.writer.Write([]byte("\r\n"))
+
+	return err
 }

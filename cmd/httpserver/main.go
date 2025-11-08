@@ -38,17 +38,23 @@ func handler(w *response.Writer, req *request.Request) {
 		handler400(w, req)
 		return
 	}
+
 	if req.RequestLine.RequestTarget == "/myproblem" {
 		handler500(w, req)
 		return
 	}
 
+	if req.RequestLine.RequestTarget == "/video" {
+		handlerVideo(w, req)
+		return
+	}
+
 	if strings.HasPrefix(req.RequestLine.RequestTarget, "/httpbin/") {
 		handlerProxy(w, req)
+		return
 	}
 
 	handler200(w, req)
-	return
 }
 
 func handler400(w *response.Writer, _ *request.Request) {
@@ -152,4 +158,18 @@ func handlerProxy(w *response.Writer, req *request.Request) {
 	trailers.Set("X-Content-SHA256", fmt.Sprintf("%x", sum))
 	trailers.Set("X-Content-Length", fmt.Sprintf("%d", len(responseTracker)))
 	w.WriteTrailers(trailers)
+}
+
+func handlerVideo(w *response.Writer, _ *request.Request) {
+	vid, err := os.ReadFile("assets/vim.mp4")
+	if err != nil {
+		log.Fatalf("failed to read file: %s", err)
+	}
+
+	w.WriteStatusLine(response.StatusCodeSuccess)
+	h := response.GetDefaultHeaders(len(vid))
+	h.Override("Content-Type", "video/mp4")
+	w.WriteHeaders(h)
+	w.WriteBody(vid)
+
 }
